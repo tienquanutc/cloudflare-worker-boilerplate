@@ -100,6 +100,18 @@ ALTER TABLE todos ADD COLUMN due_date TEXT;
 
 `npm run dev` và `npm run deploy` tự chạy các file chưa chạy.
 
+## Xem database
+
+**Local** (khi `npm run dev` đang chạy): mở <http://localhost:5173/cdn-cgi/local/explorer/d1/DB>. Gõ SQL vào ô Query rồi bấm **Run**. Mục **Observability** ở thanh bên trái cho xem từng request và `console.log`.
+
+Hoặc dùng dòng lệnh:
+
+```bash
+npx wrangler d1 execute DB --local --command "SELECT * FROM todos"
+```
+
+**Trên Cloudflare**: chạy lệnh trên nhưng đổi `--local` thành `--remote`, hoặc vào Dashboard → **D1** → `cloudflare-worker-boilerplate-db` → **Console**.
+
 ## Gặp lỗi
 
 | Lỗi | Cách sửa |
