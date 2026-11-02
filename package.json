@@ -1,0 +1,36 @@
+{
+  "name": "cloudflare-worker-boilerplate",
+  "private": true,
+  "type": "module",
+  "description": "Project mẫu: React (SPA) + Hono + D1 trên Cloudflare Workers, kèm hướng dẫn dùng trên macOS.",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "login": "wrangler login",
+    "dev": "wrangler d1 migrations apply DB --local && vite dev",
+    "build": "vite build",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.client.json",
+    "check": "npm run typecheck && npm test",
+    "deploy": "npm run check && vite build && wrangler deploy && wrangler d1 migrations apply DB --remote",
+    "tail": "wrangler tail"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "1.64.0",
+    "@cloudflare/vitest-plugin": "1.4.7",
+    "@cloudflare/workers-types": "5.20261019.1",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.1.2",
+    "typescript": "7.0.2",
+    "vite": "8.3.5",
+    "vitest": "5.0.5",
+    "wrangler": "4.152.0"
+  },
+  "dependencies": {
+    "hono": "4.13.13",
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  }
+}
