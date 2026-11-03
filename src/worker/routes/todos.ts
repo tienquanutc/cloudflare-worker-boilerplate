@@ -1,6 +1,7 @@
 import { Hono, type Context } from "hono";
-import type { Todo } from "../shared/todo";
-import type { AppEnv } from "./env";
+import type { Todo } from "../../shared/todo";
+import type { AppEnv } from "../env";
+import { badRequest, notFound, readJson } from "../lib/http";
 
 /** CRUD /api/todos, lưu trong D1 (bảng `todos`, xem migrations/). */
 export const todos = new Hono<AppEnv>();
@@ -70,21 +71,4 @@ function validTitle(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;
   const title = value.trim();
   return title.length > 0 && title.length <= MAX_TITLE ? title : undefined;
-}
-
-async function readJson(c: Context<AppEnv>): Promise<Record<string, unknown> | undefined> {
-  try {
-    const body: unknown = await c.req.json();
-    return body !== null && typeof body === "object" && !Array.isArray(body) ? (body as Record<string, unknown>) : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-function badRequest(c: Context<AppEnv>, error: string) {
-  return c.json({ error }, 400);
-}
-
-function notFound(c: Context<AppEnv>) {
-  return c.json({ error: "not_found" }, 404);
 }

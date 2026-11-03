@@ -1,27 +1,145 @@
+// Cấu hình Worker. Mức ngoài cùng = production; "env.staging" ở cuối file = staging.
+// Binding (D1, KV, R2, Queue…) KHÔNG được kế thừa sang env → mỗi env phải khai báo lại.
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "cloudflare-worker-boilerplate",
   "main": "src/worker/index.ts",
   "compatibility_date": "2026-10-15",
+  "compatibility_flags": ["nodejs_compat"],
 
   // Tài khoản có nhiều account thì bỏ comment và điền Account ID (`npx wrangler whoami`).
   // "account_id": "<ACCOUNT_ID>",
 
-  // App React (build bởi Vite). Đường dẫn lạ trả index.html để React tự route;
-  // /api/* luôn chạy vào Worker.
+  // ── URL ─────────────────────────────────────────────────────────────────
+  // https://cloudflare-worker-boilerplate.<subdomain>.workers.dev
+  "workers_dev": true,
+  // URL riêng cho từng version: https://<version>-cloudflare-worker-boilerplate.<subdomain>.workers.dev
+  "preview_urls": true,
+  // Domain riêng (zone phải nằm trong cùng account). Bỏ comment và đổi domain:
+  // "routes": [
+  //   // Custom Domain: Cloudflare tự tạo DNS + chứng chỉ, Worker là "origin" của domain.
+  //   { "pattern": "app.example.com", "custom_domain": true },
+  //   // Route: chạy Worker cho một phần URL của domain đã có (ví dụ chỉ /api/*).
+  //   { "pattern": "example.com/api/*", "zone_name": "example.com" }
+  // ],
+
+  // ── App React (build bởi Vite) ──────────────────────────────────────────
   "assets": {
+    // Đường dẫn lạ → index.html để React Router xử lý.
     "not_found_handling": "single-page-application",
+    // /api/* luôn chạy Worker, không bao giờ trả file tĩnh.
     "run_worker_first": ["/api/*"]
   },
 
-  // Database D1. Không cần database_id: lần deploy đầu Wrangler tự tạo database.
+  // ── Biến môi trường (không bí mật) ──────────────────────────────────────
+  "vars": {
+    "APP_NAME": "Cloudflare Worker Boilerplate",
+    "APP_ENV": "production"
+  },
+  // Secret (bí mật): local đặt trong .dev.vars, trên Cloudflare dùng `wrangler secret put`.
+  "secrets": { "required": ["ADMIN_TOKEN"] },
+
+  // ── D1: database SQL ────────────────────────────────────────────────────
+  // Không cần database_id: lần deploy đầu Wrangler tự tạo database.
   "d1_databases": [
-    {
-      "binding": "DB",
-      "database_name": "cloudflare-worker-boilerplate-db",
-      "migrations_dir": "migrations"
-    }
+    { "binding": "DB", "database_name": "cloudflare-worker-boilerplate-db", "migrations_dir": "migrations" }
   ],
 
-  "observability": { "enabled": true }
+  // ── KV: key-value toàn cầu (đọc nhanh, ghi chậm lan toả) ────────────────
+  // Không cần id: lần deploy đầu Wrangler tự tạo namespace.
+  "kv_namespaces": [{ "binding": "KV" }],
+
+  // ── R2: lưu file (giống S3) ─────────────────────────────────────────────
+  // Bucket tự tạo khi deploy. Account phải bật R2 trước (Dashboard → R2).
+  "r2_buckets": [{ "binding": "BUCKET", "bucket_name": "cloudflare-worker-boilerplate-files" }],
+
+  // ── Queues: hàng đợi việc chạy nền ──────────────────────────────────────
+  // Queue KHÔNG tự tạo: chạy `npm run setup` một lần trước lần deploy đầu.
+  "queues": {
+    "producers": [{ "binding": "JOBS", "queue": "cloudflare-worker-boilerplate-jobs" }],
+    "consumers": [
+      {
+        "queue": "cloudflare-worker-boilerplate-jobs",
+        "max_batch_size": 10, // tối đa 10 message mỗi lần gọi queue()
+        "max_batch_timeout": 2, // hoặc chờ tối đa 2 giây
+        "max_retries": 2, // lỗi thì thử lại 2 lần…
+        "dead_letter_queue": "cloudflare-worker-boilerplate-jobs-dlq" // …rồi chuyển sang DLQ
+      },
+      { "queue": "cloudflare-worker-boilerplate-jobs-dlq", "max_batch_size": 10, "max_batch_timeout": 2 }
+    ]
+  },
+
+  // ── Durable Objects: object có trạng thái + WebSocket ───────────────────
+  "durable_objects": { "bindings": [{ "name": "COUNTER", "class_name": "Counter" }] },
+  // Mỗi lần thêm / đổi tên / xoá class Durable Object phải thêm một migration mới (tag mới).
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Counter"] }],
+
+  // ── Workflows: quy trình nhiều bước, tự retry, có thể ngủ hàng ngày ─────
+  "workflows": [
+    { "binding": "REPORT_WORKFLOW", "name": "cloudflare-worker-boilerplate-report", "class_name": "ReportWorkflow" }
+  ],
+
+  // ── Rate limiting: giới hạn số request ──────────────────────────────────
+  // namespace_id: số bất kỳ, không trùng giữa các rate limiter trong account. period: 10 hoặc 60 giây.
+  "ratelimits": [{ "name": "RATE_LIMITER", "namespace_id": "1001", "simple": { "limit": 60, "period": 60 } }],
+
+  // ── Analytics Engine: ghi số liệu, query bằng SQL API ───────────────────
+  "analytics_engine_datasets": [{ "binding": "ANALYTICS", "dataset": "cloudflare_worker_boilerplate_requests" }],
+
+  // ── Thông tin version đang chạy (id, tag, thời gian deploy) ─────────────
+  "version_metadata": { "binding": "VERSION" },
+
+  // ── Cron Triggers (giờ UTC) ─────────────────────────────────────────────
+  "triggers": {
+    "crons": [
+      "*/30 * * * *", // mỗi 30 phút: ghi "heartbeat" vào KV
+      "0 17 * * *" // 17:00 UTC = 00:00 giờ Việt Nam: dọn job cũ trong D1
+    ]
+  },
+
+  // ── Log & source map ────────────────────────────────────────────────────
+  "observability": { "enabled": true, "head_sampling_rate": 1 },
+  "upload_source_maps": true,
+
+  // ── Môi trường staging ──────────────────────────────────────────────────
+  // Deploy: `npm run deploy:staging` → Worker "cloudflare-worker-boilerplate-staging",
+  // dùng tài nguyên riêng (database, bucket, queue… tên có hậu tố -staging).
+  "env": {
+    "staging": {
+      "vars": { "APP_NAME": "Cloudflare Worker Boilerplate (staging)", "APP_ENV": "staging" },
+      "secrets": { "required": ["ADMIN_TOKEN"] },
+      "d1_databases": [
+        { "binding": "DB", "database_name": "cloudflare-worker-boilerplate-db-staging", "migrations_dir": "migrations" }
+      ],
+      "kv_namespaces": [{ "binding": "KV" }],
+      "r2_buckets": [{ "binding": "BUCKET", "bucket_name": "cloudflare-worker-boilerplate-files-staging" }],
+      "queues": {
+        "producers": [{ "binding": "JOBS", "queue": "cloudflare-worker-boilerplate-jobs-staging" }],
+        "consumers": [
+          {
+            "queue": "cloudflare-worker-boilerplate-jobs-staging",
+            "max_batch_size": 10,
+            "max_batch_timeout": 2,
+            "max_retries": 2,
+            "dead_letter_queue": "cloudflare-worker-boilerplate-jobs-dlq-staging"
+          },
+          { "queue": "cloudflare-worker-boilerplate-jobs-dlq-staging", "max_batch_size": 10, "max_batch_timeout": 2 }
+        ]
+      },
+      "durable_objects": { "bindings": [{ "name": "COUNTER", "class_name": "Counter" }] },
+      "workflows": [
+        {
+          "binding": "REPORT_WORKFLOW",
+          "name": "cloudflare-worker-boilerplate-report-staging",
+          "class_name": "ReportWorkflow"
+        }
+      ],
+      "ratelimits": [{ "name": "RATE_LIMITER", "namespace_id": "1002", "simple": { "limit": 60, "period": 60 } }],
+      "analytics_engine_datasets": [
+        { "binding": "ANALYTICS", "dataset": "cloudflare_worker_boilerplate_requests_staging" }
+      ],
+      "version_metadata": { "binding": "VERSION" },
+      "triggers": { "crons": ["*/30 * * * *", "0 17 * * *"] }
+    }
+  }
 }

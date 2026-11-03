@@ -2,19 +2,25 @@
   "name": "cloudflare-worker-boilerplate",
   "private": true,
   "type": "module",
-  "description": "Project mẫu: React (SPA) + Hono + D1 trên Cloudflare Workers, kèm hướng dẫn dùng trên macOS.",
+  "description": "Boilerplate Cloudflare Workers: React (SPA) + Hono + D1, KV, R2, Queues, Durable Objects, Workflows, Cron, Rate limiting.",
   "engines": {
     "node": ">=22"
   },
   "scripts": {
     "login": "wrangler login",
     "dev": "wrangler d1 migrations apply DB --local && vite dev",
+    "seed": "wrangler d1 migrations apply DB --local && node scripts/seed.mjs",
+    "seed:reset": "wrangler d1 migrations apply DB --local && node scripts/seed.mjs --reset",
     "build": "vite build",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.client.json",
     "check": "npm run typecheck && npm test",
+    "setup": "node scripts/setup-cloudflare.mjs",
+    "setup:staging": "node scripts/setup-cloudflare.mjs --env staging",
     "deploy": "npm run check && vite build && wrangler deploy && wrangler d1 migrations apply DB --remote",
-    "tail": "wrangler tail"
+    "deploy:staging": "npm run check && vite build --mode staging && wrangler deploy && wrangler d1 migrations apply DB --remote",
+    "tail": "wrangler tail --config wrangler.jsonc",
+    "tail:staging": "wrangler tail --config wrangler.jsonc --env staging"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "1.64.0",
@@ -31,6 +37,7 @@
   "dependencies": {
     "hono": "4.13.13",
     "react": "19.3.1",
-    "react-dom": "19.3.1"
+    "react-dom": "19.3.1",
+    "react-router": "8.5.0"
   }
 }

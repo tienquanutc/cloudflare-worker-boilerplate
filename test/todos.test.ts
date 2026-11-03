@@ -1,17 +1,6 @@
-import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
-import type { Todo } from "../src/shared/todo";
-import app from "../src/worker/index";
-
-/** Gọi Worker bằng app.request() của Hono, với D1 của test. */
-async function call(method: string, path: string, body?: unknown): Promise<Response> {
-  const init: RequestInit = { method };
-  if (body !== undefined) {
-    init.body = typeof body === "string" ? body : JSON.stringify(body);
-    init.headers = { "Content-Type": "application/json" };
-  }
-  return app.request(path, init, env);
-}
+import type { Todo } from "../src/shared/types";
+import { call } from "./helpers";
 
 async function create(title: string): Promise<Todo> {
   const res = await call("POST", "/api/todos", { title });

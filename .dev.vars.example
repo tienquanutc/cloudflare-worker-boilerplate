@@ -1,0 +1,5 @@
+# Secret và biến chỉ dùng khi chạy local. Copy thành .dev.vars (đã git-ignore):
+#   cp .dev.vars.example .dev.vars
+# Trên Cloudflare: npx wrangler secret put ADMIN_TOKEN --config wrangler.jsonc [--env staging]
+ADMIN_TOKEN=dev-admin-token
+APP_ENV=development
